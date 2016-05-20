@@ -148,4 +148,6 @@ public interface RxBleConnection {
     Observable<byte[]> writeDescriptor(UUID serviceUuid, UUID characteristicUuid, UUID descriptorUuid, byte[] data);
 
     Observable<Integer> readRssi();
+
+    Observable<Integer> requestMtu(int mtu);
 }

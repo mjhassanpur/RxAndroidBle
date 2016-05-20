@@ -306,4 +306,8 @@ public class RxBleGattCallback {
     public Observable<Integer> getOnRssiRead() {
         return withHandlingStatusError(readRssiPublishSubject);
     }
+
+    public Observable<Integer> getOnMtuChanged() {
+        return withHandlingStatusError(changedMtuPublishSubject);
+    }
 }

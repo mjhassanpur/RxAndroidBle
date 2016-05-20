@@ -17,6 +17,7 @@ import com.polidea.rxandroidble.internal.operations.RxBleRadioOperationCharacter
 import com.polidea.rxandroidble.internal.operations.RxBleRadioOperationDescriptorRead;
 import com.polidea.rxandroidble.internal.operations.RxBleRadioOperationDescriptorWrite;
 import com.polidea.rxandroidble.internal.operations.RxBleRadioOperationReadRssi;
+import com.polidea.rxandroidble.internal.operations.RxBleRadioOperationRequestMtu;
 import com.polidea.rxandroidble.internal.operations.RxBleRadioOperationServicesDiscover;
 import com.polidea.rxandroidble.internal.util.ObservableUtil;
 
@@ -246,5 +247,10 @@ public class RxBleConnectionImpl implements RxBleConnection {
     @Override
     public Observable<Integer> readRssi() {
         return rxBleRadio.queue(new RxBleRadioOperationReadRssi(gattCallback, bluetoothGatt));
+    }
+
+    @Override
+    public Observable<Integer> requestMtu(int mtu) {
+        return rxBleRadio.queue(new RxBleRadioOperationRequestMtu(gattCallback, bluetoothGatt, mtu));
     }
 }
