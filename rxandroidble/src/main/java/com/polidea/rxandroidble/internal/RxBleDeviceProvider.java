@@ -2,6 +2,7 @@ package com.polidea.rxandroidble.internal;
 
 import android.bluetooth.BluetoothDevice;
 
+import com.polidea.rxandroidble.RxBleAdapterStateObservable;
 import com.polidea.rxandroidble.RxBleDevice;
 import com.polidea.rxandroidble.internal.cache.RxBleDeviceCache;
 import com.polidea.rxandroidble.internal.connection.RxBleConnectionConnectorImpl;
@@ -11,6 +12,8 @@ import com.polidea.rxandroidble.internal.util.BleConnectionCompat;
 import com.polidea.rxandroidble.internal.util.RxBleAdapterWrapper;
 
 import java.util.Map;
+import rx.Observable;
+import rx.Scheduler;
 
 public class RxBleDeviceProvider {
 
@@ -18,11 +21,17 @@ public class RxBleDeviceProvider {
     private final RxBleAdapterWrapper rxBleAdapterWrapper;
     private final RxBleRadio rxBleRadio;
     private final BleConnectionCompat bleConnectionCompat;
+    private final Observable<RxBleAdapterStateObservable.BleAdapterState> adapterStateObservable;
+    private final Scheduler gattCallbacksProcessingScheduler;
 
-    public RxBleDeviceProvider(RxBleAdapterWrapper rxBleAdapterWrapper, RxBleRadio rxBleRadio, BleConnectionCompat bleConnectionCompat) {
+    public RxBleDeviceProvider(RxBleAdapterWrapper rxBleAdapterWrapper, RxBleRadio rxBleRadio, BleConnectionCompat bleConnectionCompat,
+                               Observable<RxBleAdapterStateObservable.BleAdapterState> adapterStateObservable,
+                               Scheduler gattCallbacksProcessingScheduler) {
         this.rxBleAdapterWrapper = rxBleAdapterWrapper;
         this.rxBleRadio = rxBleRadio;
         this.bleConnectionCompat = bleConnectionCompat;
+        this.adapterStateObservable = adapterStateObservable;
+        this.gattCallbacksProcessingScheduler = gattCallbacksProcessingScheduler;
     }
 
     public RxBleDevice getBleDevice(String macAddress) {
@@ -43,10 +52,12 @@ public class RxBleDeviceProvider {
             final RxBleDeviceImpl newRxBleDevice = new RxBleDeviceImpl(
                     bluetoothDevice,
                     new RxBleConnectionConnectorImpl(bluetoothDevice,
-                            RxBleGattCallback::new,
+                            () -> new RxBleGattCallback(gattCallbacksProcessingScheduler),
                             new RxBleConnectionConnectorOperationsProvider(),
                             rxBleRadio,
-                            bleConnectionCompat)
+                            bleConnectionCompat,
+                            rxBleAdapterWrapper,
+                            adapterStateObservable)
             );
             availableDevices.put(macAddress, newRxBleDevice);
             return newRxBleDevice;

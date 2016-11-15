@@ -1,5 +1,6 @@
 package com.polidea.rxandroidble.mockrxandroidble;
 
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 
 import com.polidea.rxandroidble.RxBleConnection;
@@ -57,7 +58,7 @@ class RxBleDeviceMock implements RxBleDevice {
     public Observable<RxBleConnection> establishConnection(Context context, boolean autoConnect) {
         return Observable.defer(() -> {
             if (isConnected.compareAndSet(false, true)) {
-                return Observable.just(rxBleConnection)
+                return emitConnectionWithoutCompleting()
                         .doOnSubscribe(() -> connectionStateBehaviorSubject.onNext(CONNECTING))
                         .doOnNext(rxBleConnection -> connectionStateBehaviorSubject.onNext(CONNECTED))
                         .doOnUnsubscribe(() -> {
@@ -68,6 +69,10 @@ class RxBleDeviceMock implements RxBleDevice {
                 return Observable.error(new BleAlreadyConnectedException(macAddress));
             }
         });
+    }
+
+    private Observable<RxBleConnection> emitConnectionWithoutCompleting() {
+        return Observable.<RxBleConnection>never().startWith(rxBleConnection);
     }
 
     public List<UUID> getAdvertisedUUIDs() {
@@ -82,6 +87,12 @@ class RxBleDeviceMock implements RxBleDevice {
     @Override
     public String getMacAddress() {
         return macAddress;
+    }
+
+    @Override
+    public BluetoothDevice getBluetoothDevice() {
+        throw new UnsupportedOperationException("Mock does not support returning a "
+            + "BluetoothDevice.");
     }
 
     @Override

@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothAdapter;
 
 import com.polidea.rxandroidble.exceptions.BleScanException;
 import com.polidea.rxandroidble.internal.RxBleInternalScanResult;
+import com.polidea.rxandroidble.internal.RxBleLog;
 import com.polidea.rxandroidble.internal.RxBleRadioOperation;
 import com.polidea.rxandroidble.internal.util.RxBleAdapterWrapper;
 import com.polidea.rxandroidble.internal.util.UUIDUtil;
@@ -16,6 +17,8 @@ public class RxBleRadioOperationScan extends RxBleRadioOperation<RxBleInternalSc
     private final UUID[] filterServiceUUIDs;
     private final RxBleAdapterWrapper rxBleAdapterWrapper;
     private final UUIDUtil uuidUtil;
+    private volatile boolean isStarted = false;
+    private volatile boolean isStopped = false;
 
     private final BluetoothAdapter.LeScanCallback leScanCallback = (device, rssi, scanRecord) -> {
 
@@ -32,22 +35,37 @@ public class RxBleRadioOperationScan extends RxBleRadioOperation<RxBleInternalSc
     }
 
     @Override
-    public void run() {
+    protected void protectedRun() {
 
         try {
             boolean startLeScanStatus = rxBleAdapterWrapper.startLeScan(leScanCallback);
 
             if (!startLeScanStatus) {
                 onError(new BleScanException(BleScanException.BLUETOOTH_CANNOT_START));
+            } else {
+                synchronized (this) { // synchronization added for stopping the scan
+                    isStarted = true;
+                    if (isStopped) {
+                        stop();
+                    }
+                }
             }
+        } catch (Throwable throwable) {
+            isStarted = true;
+            RxBleLog.e(throwable, "Error while calling BluetoothAdapter.startLeScan()");
+            onError(new BleScanException(BleScanException.BLUETOOTH_CANNOT_START));
         } finally {
             releaseRadio();
         }
     }
 
-    public void stop() {
-        // TODO: [PU] 29.01.2016 https://code.google.com/p/android/issues/detail?id=160503
-        rxBleAdapterWrapper.stopLeScan(leScanCallback);
+    // synchronized keyword added to be sure that operation will be stopped no matter which thread will call it
+    public synchronized void stop() {
+        isStopped = true;
+        if (isStarted) {
+            // TODO: [PU] 29.01.2016 https://code.google.com/p/android/issues/detail?id=160503
+            rxBleAdapterWrapper.stopLeScan(leScanCallback);
+        }
     }
 
     private boolean containsDesiredServiceIds(byte[] scanRecord) {

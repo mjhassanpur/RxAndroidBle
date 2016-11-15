@@ -2,15 +2,14 @@ package com.polidea.rxandroidble.internal.operations
 
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
-import android.support.v4.util.Pair
 import com.polidea.rxandroidble.exceptions.BleGattCannotStartException
 import com.polidea.rxandroidble.exceptions.BleGattOperationType
 import com.polidea.rxandroidble.internal.connection.RxBleGattCallback
+import com.polidea.rxandroidble.internal.util.ByteAssociation
+import java.util.concurrent.Semaphore
 import rx.observers.TestSubscriber
 import rx.subjects.PublishSubject
 import spock.lang.Specification
-
-import java.util.concurrent.Semaphore
 
 public class RxBleRadioOperationCharacteristicReadTest extends Specification {
 
@@ -20,7 +19,7 @@ public class RxBleRadioOperationCharacteristicReadTest extends Specification {
     RxBleGattCallback mockCallback = Mock RxBleGattCallback
     BluetoothGattCharacteristic mockCharacteristic = Mock BluetoothGattCharacteristic
     TestSubscriber<byte[]> testSubscriber = new TestSubscriber()
-    PublishSubject<Pair<UUID, byte[]>> onCharacteristicReadSubject = PublishSubject.create()
+    PublishSubject<ByteAssociation<UUID>> onCharacteristicReadSubject = PublishSubject.create()
     Semaphore mockSemaphore = Mock Semaphore
     RxBleRadioOperationCharacteristicRead objectUnderTest = new RxBleRadioOperationCharacteristicRead(mockCallback, mockGatt, mockCharacteristic)
 
@@ -86,7 +85,7 @@ public class RxBleRadioOperationCharacteristicReadTest extends Specification {
         // XXX [PU] I'm not sure if it is really desired
         given:
         mockGatt.readCharacteristic(mockCharacteristic) >> true
-        onCharacteristicReadSubject.onNext(new Pair(mockCharacteristicUUID, []))
+        onCharacteristicReadSubject.onNext(new ByteAssociation(mockCharacteristicUUID, new byte[0]))
 
         when:
         objectUnderTest.run()
@@ -161,7 +160,7 @@ public class RxBleRadioOperationCharacteristicReadTest extends Specification {
         testSubscriber.assertValue secondValueFromCharacteristic
     }
 
-    def "should release Semaphore after successful write"() {
+    def "should release Semaphore after successful read"() {
 
         given:
         givenCharacteristicWithUUIDContainData([uuid: mockCharacteristicUUID, value: []])
@@ -173,7 +172,7 @@ public class RxBleRadioOperationCharacteristicReadTest extends Specification {
         1 * mockSemaphore.release()
     }
 
-    def "should release Semaphore when write failed to start"() {
+    def "should release Semaphore when read failed to start"() {
 
         given:
         givenCharacteristicReadFailToStart()
@@ -185,7 +184,7 @@ public class RxBleRadioOperationCharacteristicReadTest extends Specification {
         1 * mockSemaphore.release()
     }
 
-    def "should release Semaphore when write failed"() {
+    def "should release Semaphore when read failed"() {
         given:
         shouldEmitErrorOnCharacteristicRead(new Throwable("test"))
 
@@ -199,7 +198,7 @@ public class RxBleRadioOperationCharacteristicReadTest extends Specification {
     private givenCharacteristicWithUUIDContainData(Map... returnedDataOnRead) {
         mockGatt.readCharacteristic(mockCharacteristic) >> {
             returnedDataOnRead.each {
-                onCharacteristicReadSubject.onNext(new Pair(it['uuid'], it['value'] as byte[]))
+                onCharacteristicReadSubject.onNext(new ByteAssociation(it['uuid'], it['value'] as byte[]))
             }
 
             true

@@ -10,7 +10,7 @@ import com.polidea.rxandroidble.internal.connection.RxBleGattCallback;
 
 import rx.Subscription;
 
-public class RxBleRadioOperationCharacteristicWrite extends RxBleRadioOperation<BluetoothGattCharacteristic> {
+public class RxBleRadioOperationCharacteristicWrite extends RxBleRadioOperation<byte[]> {
 
     private final RxBleGattCallback rxBleGattCallback;
 
@@ -18,24 +18,28 @@ public class RxBleRadioOperationCharacteristicWrite extends RxBleRadioOperation<
 
     private final BluetoothGattCharacteristic bluetoothGattCharacteristic;
 
+    private final byte[] data;
+
     public RxBleRadioOperationCharacteristicWrite(RxBleGattCallback rxBleGattCallback, BluetoothGatt bluetoothGatt,
-                                                  BluetoothGattCharacteristic bluetoothGattCharacteristic) {
+                                                  BluetoothGattCharacteristic bluetoothGattCharacteristic, byte[] data) {
         this.rxBleGattCallback = rxBleGattCallback;
         this.bluetoothGatt = bluetoothGatt;
         this.bluetoothGattCharacteristic = bluetoothGattCharacteristic;
+        this.data = data;
     }
 
     @Override
-    public void run() {
+    protected void protectedRun() {
         //noinspection Convert2MethodRef
         final Subscription subscription = rxBleGattCallback
                 .getOnCharacteristicWrite()
                 .filter(uuidPair -> uuidPair.first.equals(bluetoothGattCharacteristic.getUuid()))
                 .take(1)
-                .map(uuidPair -> bluetoothGattCharacteristic)
+                .map(uuidPair -> uuidPair.second)
                 .doOnCompleted(() -> releaseRadio())
                 .subscribe(getSubscriber());
 
+        bluetoothGattCharacteristic.setValue(data);
         final boolean success = bluetoothGatt.writeCharacteristic(bluetoothGattCharacteristic);
         if (!success) {
             subscription.unsubscribe();

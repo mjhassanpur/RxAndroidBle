@@ -12,6 +12,9 @@ For support head to [StackOverflow #rxandroidble](http://stackoverflow.com/quest
 
 Read the official announcement at [Polidea Blog](https://www.polidea.com/blog/RXAndroidBLE/).
 
+## RxAndroidBLE @ Mobile Central Europe 2016
+[![RxAndroidBLE @ Mobile Central Europe 2016](https://img.youtube.com/vi/0aKfUGCxUDM/0.jpg)](https://www.youtube.com/watch?v=0aKfUGCxUDM)
+
 ## Usage
 ### Obtaining the client
 It's your job to maintain single instance of the client. You can use singleton, scoped [Dagger](http://google.github.io/dagger/) component or whatever else you want.
@@ -25,10 +28,15 @@ Scanning devices in the area is simple as that:
 
 ```java
 Subscription scanSubscription = rxBleClient.scanBleDevices()
-	.subscribe(rxBleScanResult -> {
-	    // Process scan result here.
-	});
-	
+	.subscribe(
+	    rxBleScanResult -> {
+	        // Process scan result here.
+	    },
+	    throwable -> {
+	        // Handle an error here.
+	    }
+	);
+
 // When done, just unsubscribe.
 scanSubscription.unsubscribe();
 ```
@@ -41,38 +49,56 @@ String macAddress = "AA:BB:CC:DD:EE:FF";
 RxBleDevice device = rxBleClient.getBleDevice(macAddress);
 
 Subscription subscription = device.establishConnection(context, false) // <-- autoConnect flag
-	.subscribe(rxBleConnection -> {
-		// All GATT operations are done through the rxBleConnection.
-	});
-	
+	.subscribe(
+	    rxBleConnection -> {
+		    // All GATT operations are done through the rxBleConnection.
+	    },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
+
 // When done... unsubscribe and forget about connection teardown :)
 subscription.unsubscribe();
 ```
 
 #### Auto connect
-Auto connect concept may be misleading at first glance. Without the autoconnect flag the connection will end up with an error if a BLE device is not advertising when the `RxBleDevice#establishConnection` method is called. From platform to platform timeout after which the error is emitted differs, but in general it is rather tens of seconds than single seconds.
+After https://developer.android.com/reference/android/bluetooth/BluetoothDevice.html#connectGatt(android.content.Context, boolean, android.bluetooth.BluetoothGattCallback):
+autoConnect	boolean: Whether to directly connect to the remote device (false) or to automatically connect as soon as the remote device becomes available (true).
 
-Setting the auto connect flag allows you to wait until the BLE device becomes discoverable. The `RxBleConnection` instance won't be emited until the connection is fully set up. It also handles acquiring wakelockes, so it's safe to assume that your Android device will be woken up after the connection has been established.
+Auto connect concept may be misleading at first glance. With the autoconnect flag set to false the connection will end up with an error if a BLE device is not advertising when the `RxBleDevice#establishConnection` method is called. From platform to platform timeout after which the error is emitted differs, but in general it is rather tens of seconds than single seconds.
 
-Be careful not to overuse the autoconnect flag. On the other side it has negative impact on the connection initialization speed. Scanning window and interval is lowered as it is optimized for background use and depending on Bluetooth parameters it may take more time to establish the connection.
+Setting the auto connect flag to true allows you to wait until the BLE device becomes discoverable. The `RxBleConnection` instance won't be emitted until the connection is fully set up. From experience it also handles acquiring wake locks, so it's safe to assume that your Android device will be woken up after the connection has been established - but it is not a documented feature and may change in the future system releases.
+
+Be careful not to overuse the autoConnect flag. On the other side it has negative impact on the connection initialization speed. Scanning window and interval is lowered as it is optimized for background use and depending on Bluetooth parameters it may (and usually do) take more time to establish the connection.
 
 ### Read / write operations
 #### Read
 ```java
 device.establishConnection(context, false)
 	.flatMap(rxBleConnection -> rxBleConnection.readCharacteristic(characteristicUUID))
-	.subscribe(characteristicValue -> {
-		// Read characteristic value.
-	});
+	.subscribe(
+	    characteristicValue -> {
+		    // Read characteristic value.
+	    },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
 
 ```
 #### Write
 ```java
 device.establishConnection(context, false)
 	.flatMap(rxBleConnection -> rxBleConnection.writeCharacteristic(characteristicUUID, bytesToWrite))
-	.subscribe(characteristicValue -> {
-		// Characteristic value confirmed.
-	});
+	.subscribe(
+	    characteristicValue -> {
+		    // Characteristic value confirmed.
+	    },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
 ```
 #### Multiple reads
 ```java
@@ -82,9 +108,14 @@ device.establishConnection(context, false)
         rxBleConnection.readCharacteristic(secondUUID),
         YourModelCombiningTwoValues::new
     ))
-	.subscribe(model -> {
-	    // Process your model.
-	});
+	.subscribe(
+	    model -> {
+	        // Process your model.
+	    },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
 ```
 #### Read and write combined
 
@@ -94,10 +125,15 @@ device.establishConnection(context, false)
 	    .doOnNext(bytes -> {
 	        // Process read data.
 	    })
-	    .flatMap(bytes -> rxBleConnection.writeCharacteristic(characteristicUuid, bytesToWrite))
-	.subscribe(writeBytes -> {
-		// Written data.
-	});
+	    .flatMap(bytes -> rxBleConnection.writeCharacteristic(characteristicUuid, bytesToWrite)))
+	.subscribe(
+	    writeBytes -> {
+		    // Written data.
+	    },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
 ```
 ### Change notifications
 ```java
@@ -107,9 +143,14 @@ device.establishConnection(context, false)
     	// Notification has been set up
     })
     .flatMap(notificationObservable -> notificationObservable) // <-- Notification has been set up, now observe value changes.
-    .subscribe(bytes -> {
-    	// Given characteristic has been changes, here is the value.
-    });
+    .subscribe(
+        bytes -> {
+            // Given characteristic has been changes, here is the value.
+        },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
 
 ```
 ### Observing connection state
@@ -117,9 +158,14 @@ If you want to observe changes in device connection state just subscribe like be
 
 ```java
 device.observeConnectionStateChanges()
-    .subscribe(connectionState -> {
-    	// Process your way.
-    });
+    .subscribe(
+        connectionState -> {
+            // Process your way.
+        },
+        throwable -> {
+            // Handle an error here.
+        }
+    );
 ```
 ### Logging
 For connection debugging you can use extended logging
@@ -140,7 +186,7 @@ Complete usage examples are located in `/sample` [GitHub repo](https://github.co
 ### Gradle
 
 ```java
-compile "com.polidea.rxandroidble:rxandroidble:1.0.1"
+compile "com.polidea.rxandroidble:rxandroidble:1.1.0"
 ```
 ### Maven
 
@@ -148,7 +194,7 @@ compile "com.polidea.rxandroidble:rxandroidble:1.0.1"
 <dependency>
   <groupId>com.polidea.rxandroidble</groupId>
   <artifactId>rxandroidble</artifactId>
-  <version>1.0.1</version>
+  <version>1.1.0</version>
   <type>aar</type>
 </dependency>
 ```
@@ -166,6 +212,7 @@ When submitting code, please make every effort to follow existing conventions an
 
 ## Contributors, thank you!
 * Michał Zieliński (michal.zielinski@polidea.com)
+* Fracturedpsyche (https://github.com/fracturedpsyche)
 
 ## License
 

@@ -5,6 +5,8 @@ import rx.Observable
 import rx.Scheduler
 import rx.android.plugins.RxAndroidPlugins
 import rx.android.plugins.RxAndroidSchedulersHook
+import rx.android.schedulers.AndroidSchedulers
+import rx.internal.schedulers.ImmediateScheduler
 import rx.observers.TestSubscriber
 import rx.schedulers.Schedulers
 import spock.lang.Specification
@@ -20,8 +22,16 @@ class RxBleRadioTest extends Specification {
     public static final String MAIN_THREAD_NAME = "test-thread"
     RxBleRadioImpl objectUnderTest
 
-    void setup() {
+    void setupSpec() {
         useThreadWithNameAsMainThread(MAIN_THREAD_NAME)
+    }
+
+    void teardownSpec() {
+        AndroidSchedulers.reset()
+        RxAndroidPlugins.getInstance().reset()
+    }
+
+    void setup() {
         objectUnderTest = new RxBleRadioImpl()
     }
 
@@ -128,21 +138,35 @@ class RxBleRadioTest extends Specification {
 
     def "should emit onError and release radio if error occured"() {
         given:
-        def testSubscriber = new TestSubscriber()
-        def firstOperation = MockOperation.mockOperation(NORMAL, {
-            it.onError(new Throwable("Some throwable"))
-        })
+        def firstTestSubscriber = new TestSubscriber()
+        def secondTestSubscriber = new TestSubscriber()
+        def firstOperation =  MockOperation.mockOperation(NORMAL, {
+                    it.onError(new Throwable("First throwable"))
+                })
+
+        def secondOperation = new MockOperation(NORMAL, null) {
+            @Override
+            void protectedRun() {
+                // simulate that a not handled exception was thrown somewhere
+                throw new Exception("Second throwable")
+            }
+        }
 
         when:
-        objectUnderTest.queue(firstOperation).subscribe(testSubscriber)
+        objectUnderTest.queue(firstOperation).subscribe(firstTestSubscriber)
+        objectUnderTest.queue(secondOperation).subscribe(secondTestSubscriber)
         waitForThreadsToCompleteWork()
 
         then:
-        testSubscriber.assertError(Throwable)
+        firstTestSubscriber.assertError(Throwable)
+        secondTestSubscriber.assertError(Throwable)
 
         and:
-        testSubscriber.assertError {
-            it.message == "Some throwable"
+        firstTestSubscriber.assertError {
+            it.message == "First throwable"
+        }
+        secondTestSubscriber.assertError {
+            it.message == "Second throwable"
         }
     }
 
@@ -164,6 +188,7 @@ class RxBleRadioTest extends Specification {
     }
 
     public useThreadWithNameAsMainThread(String threadName) {
+        AndroidSchedulers.reset()
         RxAndroidPlugins.getInstance().reset()
         RxAndroidPlugins.getInstance().registerSchedulersHook(new RxAndroidSchedulersHook() {
             @Override

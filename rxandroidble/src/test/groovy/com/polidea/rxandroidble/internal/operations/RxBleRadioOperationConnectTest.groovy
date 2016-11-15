@@ -6,6 +6,7 @@ import android.content.Context
 import com.polidea.rxandroidble.RxBleConnection
 import com.polidea.rxandroidble.internal.connection.RxBleGattCallback
 import com.polidea.rxandroidble.internal.util.BleConnectionCompat
+import rx.Subscription
 import rx.observers.TestSubscriber
 import rx.subjects.PublishSubject
 import spock.lang.Specification
@@ -23,19 +24,22 @@ public class RxBleRadioOperationConnectTest extends Specification {
     TestSubscriber<BluetoothGatt> getGattSubscriber = new TestSubscriber()
     PublishSubject<RxBleConnection.RxBleConnectionState> onConnectionStateSubject = PublishSubject.create()
     PublishSubject<BluetoothGatt> bluetoothGattPublishSubject = PublishSubject.create()
+    PublishSubject observeDisconnectPublishSubject = PublishSubject.create()
     Semaphore mockSemaphore = Mock Semaphore
+    Subscription asObservableSubscription
     RxBleRadioOperationConnect objectUnderTest
 
     def setup() {
         mockCallback.getOnConnectionStateChange() >> onConnectionStateSubject
         mockCallback.getBluetoothGatt() >> bluetoothGattPublishSubject
+        mockCallback.observeDisconnect() >> observeDisconnectPublishSubject
         prepareObjectUnderTest(false)
     }
 
     def prepareObjectUnderTest(boolean autoConnect) {
         objectUnderTest = new RxBleRadioOperationConnect(mockBluetoothDevice, mockCallback, connectionCompat, autoConnect)
         objectUnderTest.setRadioBlockingSemaphore(mockSemaphore)
-        objectUnderTest.asObservable().subscribe(testSubscriber)
+        asObservableSubscription = objectUnderTest.asObservable().subscribe(testSubscriber)
         objectUnderTest.getBluetoothGatt().subscribe(getGattSubscriber)
     }
 
@@ -46,6 +50,19 @@ public class RxBleRadioOperationConnectTest extends Specification {
 
         when:
         emitConnectingConnectionState()
+
+        then:
+        testSubscriber.assertNoValues()
+    }
+
+    def "asObservable() should not emit onNext if RxBleGattCallback.getBluetoothGatt() completes (this happens when device fails to connect)"() {
+
+        given:
+        objectUnderTest.run()
+        bluetoothGattPublishSubject.onNext(mockGatt)
+
+        when:
+        bluetoothGattPublishSubject.onCompleted()
 
         then:
         testSubscriber.assertNoValues()
@@ -155,6 +172,18 @@ public class RxBleRadioOperationConnectTest extends Specification {
 
         when:
         emitConnectionError(new Throwable("test"))
+
+        then:
+        1 * mockSemaphore.release()
+    }
+
+    def "should release Semaphore when unsubscribed before connection is established"() {
+
+        given:
+        objectUnderTest.run()
+
+        when:
+        asObservableSubscription.unsubscribe()
 
         then:
         1 * mockSemaphore.release()
