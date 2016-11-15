@@ -20,11 +20,16 @@ import com.polidea.rxandroidble.internal.util.RxBleAdapterWrapper;
 import com.polidea.rxandroidble.internal.util.UUIDUtil;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import rx.Observable;
+import rx.Scheduler;
+import rx.schedulers.Schedulers;
 
 class RxBleClientImpl extends RxBleClient {
 
@@ -40,29 +45,59 @@ class RxBleClientImpl extends RxBleClient {
                     RxBleRadio rxBleRadio,
                     Observable<BleAdapterState> adapterStateObservable,
                     UUIDUtil uuidUtil,
-                    BleConnectionCompat bleConnectionCompat,
-                    LocationServicesStatus locationServicesStatus) {
+                    LocationServicesStatus locationServicesStatus,
+                    RxBleDeviceProvider rxBleDeviceProvider) {
         this.uuidUtil = uuidUtil;
         this.rxBleRadio = rxBleRadio;
         this.rxBleAdapterWrapper = rxBleAdapterWrapper;
         this.rxBleAdapterStateObservable = adapterStateObservable;
         this.locationServicesStatus = locationServicesStatus;
-        rxBleDeviceProvider = new RxBleDeviceProvider(this.rxBleAdapterWrapper, this.rxBleRadio, bleConnectionCompat);
+        this.rxBleDeviceProvider = rxBleDeviceProvider;
     }
 
     public static RxBleClientImpl getInstance(@NonNull Context context) {
+        final RxBleAdapterWrapper rxBleAdapterWrapper = new RxBleAdapterWrapper(BluetoothAdapter.getDefaultAdapter());
+        final RxBleRadioImpl rxBleRadio = new RxBleRadioImpl();
+        final RxBleAdapterStateObservable adapterStateObservable = new RxBleAdapterStateObservable(context.getApplicationContext());
+        final BleConnectionCompat bleConnectionCompat = new BleConnectionCompat(context);
+        final ExecutorService executor = Executors.newSingleThreadExecutor();
+        final Scheduler gattCallbacksProcessingScheduler = Schedulers.from(executor);
         return new RxBleClientImpl(
-                new RxBleAdapterWrapper(BluetoothAdapter.getDefaultAdapter()),
-                new RxBleRadioImpl(),
-                new RxBleAdapterStateObservable(context.getApplicationContext()),
+                rxBleAdapterWrapper,
+                rxBleRadio,
+                adapterStateObservable,
                 new UUIDUtil(),
-                new BleConnectionCompat(context),
-                new LocationServicesStatus(context, (LocationManager) context.getSystemService(Context.LOCATION_SERVICE)));
+                new LocationServicesStatus(context, (LocationManager) context.getSystemService(Context.LOCATION_SERVICE)),
+                new RxBleDeviceProvider(
+                        rxBleAdapterWrapper,
+                        rxBleRadio,
+                        bleConnectionCompat,
+                        adapterStateObservable,
+                        gattCallbacksProcessingScheduler
+                )
+        ) {
+            @Override
+            protected void finalize() throws Throwable {
+                super.finalize();
+                executor.shutdown();
+            }
+        };
     }
 
     @Override
     public RxBleDevice getBleDevice(@NonNull String macAddress) {
         return rxBleDeviceProvider.getBleDevice(macAddress);
+    }
+
+    @Override
+    public Set<RxBleDevice> getBondedDevices() {
+        Set<RxBleDevice> rxBleDevices = new HashSet<>();
+        Set<BluetoothDevice> bluetoothDevices = rxBleAdapterWrapper.getBondedDevices();
+        for (BluetoothDevice bluetoothDevice : bluetoothDevices) {
+            rxBleDevices.add(getBleDevice(bluetoothDevice.getAddress()));
+        }
+
+        return rxBleDevices;
     }
 
     @Override

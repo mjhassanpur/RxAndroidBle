@@ -2,15 +2,14 @@ package com.polidea.rxandroidble.internal.operations
 
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
-import android.support.v4.util.Pair
 import com.polidea.rxandroidble.exceptions.BleGattCannotStartException
 import com.polidea.rxandroidble.exceptions.BleGattOperationType
 import com.polidea.rxandroidble.internal.connection.RxBleGattCallback
+import com.polidea.rxandroidble.internal.util.ByteAssociation
+import java.util.concurrent.Semaphore
 import rx.observers.TestSubscriber
 import rx.subjects.PublishSubject
 import spock.lang.Specification
-
-import java.util.concurrent.Semaphore
 
 public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
 
@@ -20,9 +19,10 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
     RxBleGattCallback mockCallback = Mock RxBleGattCallback
     BluetoothGattCharacteristic mockCharacteristic = Mock BluetoothGattCharacteristic
     def testSubscriber = new TestSubscriber()
-    PublishSubject<Pair<UUID, byte[]>> onCharacteristicWriteSubject = PublishSubject.create()
+    PublishSubject<ByteAssociation<UUID>> onCharacteristicWriteSubject = PublishSubject.create()
     Semaphore mockSemaphore = Mock Semaphore
     RxBleRadioOperationCharacteristicWrite objectUnderTest
+    byte[] testData = ['t', 'e', 's', 't']
 
     def setup() {
         mockCharacteristic.getUuid() >> mockCharacteristicUUID
@@ -30,10 +30,13 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
         prepareObjectUnderTest()
     }
 
-    def "should call BluetoothGatt.writeCharacteristic() only once on single write when run()"() {
+    def "should call only once BluetoothGattCharacteristic.setValue() before calling BluetoothGatt.writeCharacteristic() on single write when run()"() {
 
         when:
         objectUnderTest.run()
+
+        then:
+        1 * mockCharacteristic.setValue(testData) >> true
 
         then:
         1 * mockGatt.writeCharacteristic(mockCharacteristic) >> true
@@ -85,7 +88,7 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
 
         given:
         mockGatt.writeCharacteristic(mockCharacteristic) >> true
-        onCharacteristicWriteSubject.onNext(new Pair(mockCharacteristicUUID, []))
+        onCharacteristicWriteSubject.onNext(new ByteAssociation(mockCharacteristicUUID, new byte[0]))
 
         when:
         objectUnderTest.run()
@@ -108,7 +111,7 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
         objectUnderTest.run()
 
         then:
-        testSubscriber.assertValue mockCharacteristic
+        testSubscriber.assertValue dataFromCharacteristic
     }
 
     def "asObservable() emit only first characteristic value notified"() {
@@ -128,7 +131,7 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
         testSubscriber.assertValueCount 1
 
         and:
-        testSubscriber.assertValue mockCharacteristic
+        testSubscriber.assertValue dataFromCharacteristic
     }
 
     def "asObservable() not emit characteristic value if BLE notified only with non matching characteristics"() {
@@ -160,7 +163,7 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
         testSubscriber.assertValueCount 1
 
         and:
-        testSubscriber.assertValue mockCharacteristic
+        testSubscriber.assertValue secondValueFromCharacteristic
     }
 
     def "should release Semaphore after successful write"() {
@@ -201,7 +204,7 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
     private givenCharacteristicWithUUIDWritesData(Map... returnedDataOnWrite) {
         mockGatt.writeCharacteristic(mockCharacteristic) >> {
             returnedDataOnWrite.each {
-                onCharacteristicWriteSubject.onNext(new Pair(it['uuid'], it['value'] as byte[]))
+                onCharacteristicWriteSubject.onNext(new ByteAssociation(it['uuid'], it['value'] as byte[]))
             }
 
             true
@@ -220,7 +223,7 @@ public class RxBleRadioOperationCharacteristicWriteTest extends Specification {
     }
 
     private prepareObjectUnderTest() {
-        objectUnderTest = new RxBleRadioOperationCharacteristicWrite(mockCallback, mockGatt, mockCharacteristic)
+        objectUnderTest = new RxBleRadioOperationCharacteristicWrite(mockCallback, mockGatt, mockCharacteristic, testData)
         objectUnderTest.setRadioBlockingSemaphore(mockSemaphore)
         objectUnderTest.asObservable().subscribe(testSubscriber)
     }

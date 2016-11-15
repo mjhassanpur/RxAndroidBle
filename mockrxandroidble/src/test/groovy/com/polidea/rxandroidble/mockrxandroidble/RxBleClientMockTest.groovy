@@ -1,6 +1,7 @@
 package com.polidea.rxandroidble.mockrxandroidble
 
 import android.os.Build
+import com.polidea.rxandroidble.RxBleConnection
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robospock.RoboSpecification
@@ -40,6 +41,20 @@ public class RxBleClientMockTest extends RoboSpecification {
                         ).build()
                 ).build()
         ).build();
+    }
+
+    def "should return filtered BluetoothDevice"() {
+        given:
+        def testSubscriber = TestSubscriber.create()
+
+        when:
+        rxBleClient.scanBleDevices(serviceUUID)
+                .take(1)
+                .map { scanResult -> scanResult.getBleDevice().getMacAddress() }
+                .subscribe(testSubscriber)
+
+        then:
+        testSubscriber.assertValue("AA:BB:CC:DD:EE:FF")
     }
 
     def "should return the BluetoothDevice name"() {
@@ -154,5 +169,39 @@ public class RxBleClientMockTest extends RoboSpecification {
 
         then:
         testSubscriber.assertValue("NotificationData")
+    }
+
+    def "should emit correct connection state values when connected"() {
+        given:
+        def testSubscriber = TestSubscriber.create()
+        def device = rxBleClient.getBleDevice("AA:BB:CC:DD:EE:FF")
+        device.observeConnectionStateChanges().subscribe(testSubscriber);
+
+        when:
+        device.establishConnection(RuntimeEnvironment.application, false).subscribe {}
+
+        then:
+        testSubscriber.assertValues(
+                RxBleConnection.RxBleConnectionState.DISCONNECTED,
+                RxBleConnection.RxBleConnectionState.CONNECTING,
+                RxBleConnection.RxBleConnectionState.CONNECTED)
+    }
+
+    def "should emit correct connection state values when disconnected"() {
+        given:
+        def testSubscriber = TestSubscriber.create()
+        def device = rxBleClient.getBleDevice("AA:BB:CC:DD:EE:FF")
+        device.observeConnectionStateChanges().subscribe(testSubscriber);
+        def subscription = device.establishConnection(RuntimeEnvironment.application, false).subscribe {}
+
+        when:
+        subscription.unsubscribe()
+
+        then:
+        testSubscriber.assertValues(
+                RxBleConnection.RxBleConnectionState.DISCONNECTED,
+                RxBleConnection.RxBleConnectionState.CONNECTING,
+                RxBleConnection.RxBleConnectionState.CONNECTED,
+                RxBleConnection.RxBleConnectionState.DISCONNECTED)
     }
 }
